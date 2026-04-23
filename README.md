@@ -143,9 +143,22 @@ docker run --rm -p 8080:8080 \
 Need help? Open an issue or use Railway Station support for this template.
 
 
+
+## Userful stuff
 openclaw gateway restart
 railway ssh --service OpenClaw -- openclaw gateway restart
 railway shell --service OpenClaw
-
-
 openclaw logs --follow
+
+eval "$(ssh-agent -s)"
+ssh-add /data/.ssh/nectarvet-web
+
+eval "$(ssh-agent -s)"
+ssh-add /data/.ssh/nectarvet-server
+
+openclaw channels add \
+--channel slack \
+--bot-token BOT_TOKEN \
+--app-token APP_TOKEN
+
+openclaw gateway restart
