@@ -141,3 +141,11 @@ docker run --rm -p 8080:8080 \
 ## Support
 
 Need help? Open an issue or use Railway Station support for this template.
+
+
+openclaw gateway restart
+railway ssh --service OpenClaw -- openclaw gateway restart
+railway shell --service OpenClaw
+
+
+openclaw logs --follow

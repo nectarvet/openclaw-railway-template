@@ -26,7 +26,7 @@ RUN corepack enable && pnpm install --frozen-lockfile --prod
 COPY src ./src
 COPY --chmod=755 entrypoint.sh ./entrypoint.sh
 
-RUN useradd -m -s /bin/bash openclaw \
+RUN useradd -m -u 1001 -s /bin/bash openclaw \
   && chown -R openclaw:openclaw /app \
   && mkdir -p /data && chown openclaw:openclaw /data \
   && mkdir -p /home/linuxbrew/.linuxbrew && chown -R openclaw:openclaw /home/linuxbrew

@@ -217,6 +217,7 @@ async function startGateway() {
 
   const stopResult = await runCmd(OPENCLAW_NODE, clawArgs(["gateway", "stop"]));
   log.info("gateway", `stop existing gateway exit=${stopResult.code}`);
+  await sleep(500);
 
   const args = [
     "gateway",
@@ -634,6 +635,24 @@ if (payload.authChoice && !VALID_AUTH_CHOICES.includes(payload.authChoice)) {
       return `Invalid ${field}: must be a string`;
     }
   }
+
+  const model = payload.model?.trim().toLowerCase();
+  if (model) {
+    // Guard against the most common mismatches that cause confusing setup outcomes.
+    if (payload.authChoice === "openai-api-key" && model.startsWith("anthropic/")) {
+      return "Model/auth mismatch: OpenAI auth selected but model is anthropic/*. Use openai/<model> (for example openai/gpt-5.4).";
+    }
+    if (payload.authChoice === "apiKey" && model.startsWith("openai/")) {
+      return "Model/auth mismatch: Anthropic auth selected but model is openai/*. Use anthropic/<model> (for example anthropic/claude-sonnet-4).";
+    }
+  }
+
+  const slackBot = payload.slackBotToken?.trim();
+  const slackApp = payload.slackAppToken?.trim();
+  if ((slackBot && !slackApp) || (!slackBot && slackApp)) {
+    return "Slack requires both tokens: Bot User OAuth (xoxb-...) and App-Level token (xapp-...) with Socket Mode (scope connections:write).";
+  }
+
   return null;
 }
 
@@ -700,6 +719,17 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         ]),
       );
       extra += `[config] gateway.trustedProxies exit=${proxiesResult.code}\n`;
+
+      const slackDmResult = await runCmd(
+        OPENCLAW_NODE,
+        clawArgs([
+          "config",
+          "set",
+          "channels.slack.dm.policy",
+          "allow",
+        ]),
+      );
+      extra += `[config] channels.slack.dm.policy=allow exit=${slackDmResult.code}\n`;
 
       if (payload.model?.trim()) {
         extra += `[setup] Setting model to ${payload.model.trim()}...\n`;
