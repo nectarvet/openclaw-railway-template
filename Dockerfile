@@ -33,6 +33,7 @@ RUN useradd -m -u 1001 -s /bin/bash openclaw \
   && mkdir -p /data && chown openclaw:openclaw /data \
   && mkdir -p /home/linuxbrew/.linuxbrew && chown -R openclaw:openclaw /home/linuxbrew
 
+RUN ln -s /usr/bin/python3 /usr/bin/python
 USER openclaw
 RUN NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
