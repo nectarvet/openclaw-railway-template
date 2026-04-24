@@ -11,6 +11,7 @@ RUN apt-get update \
     build-essential \
     zip \
     ripgrep \
+    vim \
   && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g openclaw@2026.3.13 clawhub@latest
