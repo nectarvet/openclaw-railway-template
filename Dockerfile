@@ -10,6 +10,7 @@ RUN apt-get update \
     python3 \
     build-essential \
     zip \
+    ripgrep \
   && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g openclaw@2026.3.13 clawhub@latest
