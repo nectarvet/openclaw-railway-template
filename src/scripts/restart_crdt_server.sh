@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # for CRDT
-curl -X POST https://backboard.railway.com/graphql/v2 \
+curl -sS --fail-with-body -X POST https://backboard.railway.com/graphql/v2 \
   -H "Content-Type: application/json" \
   -H "Project-Access-Token: 3bfd294c-fc81-4c2d-a915-8b4bc7182cb5" \
   -d '{
