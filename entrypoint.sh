@@ -21,5 +21,6 @@ fi
 rm -rf /home/linuxbrew/.linuxbrew
 ln -sfn /data/.linuxbrew /home/linuxbrew/.linuxbrew
 
+unset GH_TOKEN
 source /data/env.sh
 exec gosu openclaw node src/server.js
