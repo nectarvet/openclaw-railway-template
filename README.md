@@ -162,3 +162,7 @@ openclaw channels add \
 --app-token APP_TOKEN
 
 openclaw gateway restart
+railway restart --service OpenClaw
+
+
+update openclaw 
