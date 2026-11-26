@@ -311,6 +311,82 @@ async function restartGateway() {
   return ensureGatewayRunning();
 }
 
+// The container has a hard cap on processes + threads (cgroup pids.max, 1000 on
+// Railway). Agent sessions leak child processes over days; once the cap is hit
+// every spawn fails with EAGAIN and the agent stops replying while the HTTP
+// side still looks healthy. Restart the gateway before that happens.
+const PIDS_WATCHDOG_THRESHOLD = Number.parseFloat(
+  process.env.PIDS_WATCHDOG_THRESHOLD ?? "0.85",
+);
+const PIDS_WATCHDOG_INTERVAL_MS = 60_000;
+const PIDS_WATCHDOG_RECHECK_MS = 180_000;
+const GATEWAY_KILL_GRACE_MS = 30_000;
+
+function readPidUsage() {
+  try {
+    const current = Number.parseInt(
+      fs.readFileSync("/sys/fs/cgroup/pids.current", "utf8"),
+      10,
+    );
+    const max = Number.parseInt(
+      fs.readFileSync("/sys/fs/cgroup/pids.max", "utf8"),
+      10,
+    );
+    if (!Number.isFinite(current) || !Number.isFinite(max) || max <= 0) {
+      return null;
+    }
+    return { current, max, ratio: current / max };
+  } catch {
+    return null;
+  }
+}
+
+function isPidUsageCritical(usage) {
+  return Boolean(usage) && usage.ratio >= PIDS_WATCHDOG_THRESHOLD;
+}
+
+let pidsWatchdogRestartedAt = 0;
+
+function checkPidUsage() {
+  if (shuttingDown) return;
+  const usage = readPidUsage();
+  if (!isPidUsageCritical(usage)) {
+    pidsWatchdogRestartedAt = 0;
+    return;
+  }
+
+  const summary = `${usage.current}/${usage.max} pids`;
+
+  if (pidsWatchdogRestartedAt) {
+    if (Date.now() - pidsWatchdogRestartedAt < PIDS_WATCHDOG_RECHECK_MS) return;
+    // Restarting the gateway did not free the leaked processes. Exit non-zero
+    // so Railway's on_failure restart policy replaces the whole container.
+    log.error("watchdog", `${summary} still in use after gateway restart; exiting so the container restarts`);
+    process.exit(1);
+  }
+
+  if (!gatewayProc || gatewayStarting) return;
+
+  log.error("watchdog", `${summary} in use (threshold ${PIDS_WATCHDOG_THRESHOLD}); restarting gateway to free leaked processes`);
+  pidsWatchdogRestartedAt = Date.now();
+  const proc = gatewayProc;
+  // The gateway's exit handler schedules the restart.
+  const killTimer = setTimeout(() => {
+    log.warn("watchdog", "gateway did not exit after SIGTERM; sending SIGKILL");
+    try {
+      proc.kill("SIGKILL");
+    } catch {}
+  }, GATEWAY_KILL_GRACE_MS);
+  proc.once("exit", () => clearTimeout(killTimer));
+  try {
+    proc.kill("SIGTERM");
+  } catch (err) {
+    log.warn("watchdog", `kill error: ${err.message}`);
+  }
+}
+
+const pidsWatchdogInterval = setInterval(checkPidUsage, PIDS_WATCHDOG_INTERVAL_MS);
+
 const setupRateLimiter = {
   attempts: new Map(),
   windowMs: 60_000,
@@ -383,7 +459,11 @@ app.get("/healthz", async (_req, res) => {
   if (isConfigured()) {
     gateway = isGatewayReady() ? "ready" : "starting";
   }
-  res.json({ ok: true, gateway });
+  // Point an uptime monitor here: 503 means the agent cannot work even though
+  // the wrapper still answers. Railway's deploy healthcheck uses /setup/healthz.
+  const pids = readPidUsage();
+  const ok = gateway !== "starting" && !isPidUsageCritical(pids);
+  res.status(ok ? 200 : 503).json({ ok, gateway, pids });
 });
 
 app.get("/setup/healthz", async (_req, res) => {
@@ -409,6 +489,7 @@ app.get("/setup/healthz", async (_req, res) => {
     gatewayRunning,
     gatewayStarting: starting,
     gatewayReachable,
+    pids: readPidUsage(),
   });
 });
 
@@ -1283,6 +1364,8 @@ server.on("upgrade", async (req, socket, head) => {
 async function gracefulShutdown(signal) {
   log.info("wrapper", `received ${signal}, shutting down`);
   shuttingDown = true;
+
+  clearInterval(pidsWatchdogInterval);
 
   if (setupRateLimiter.cleanupInterval) {
     clearInterval(setupRateLimiter.cleanupInterval);

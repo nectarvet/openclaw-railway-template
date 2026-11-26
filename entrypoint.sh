@@ -23,4 +23,7 @@ ln -sfn /data/.linuxbrew /home/linuxbrew/.linuxbrew
 
 unset GH_TOKEN
 source /data/env.sh
-exec gosu openclaw node src/server.js
+# tini runs as PID 1 so orphaned agent/MCP child processes are reaped. With
+# node as PID 1 they stay as zombies and each one holds a slot of the
+# container's pid limit until the next redeploy.
+exec tini -- gosu openclaw node src/server.js

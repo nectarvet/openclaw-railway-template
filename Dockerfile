@@ -12,9 +12,13 @@ RUN apt-get update \
     zip \
     ripgrep \
     vim \
+    tini \
   && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g openclaw@2026.11.1 clawhub@latest
+# mongodb-mcp-server is installed globally so the MCP config can run the binary
+# directly. Launching it through `npx` costs an extra npm + sh process (12 of
+# the container's 1000 pids) for every running copy.
+RUN npm install -g openclaw@2026.11.1 clawhub@latest mongodb-mcp-server@3.4.0
 
 # Backward-compatibility shim for older OPENCLAW_ENTRY values.
 RUN mkdir -p /openclaw \
